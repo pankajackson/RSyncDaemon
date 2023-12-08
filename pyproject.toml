@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rsyncdaemon"
+version = "1.0.0"
+authors = [
+  { name="Pankaj Jackson", email="pankajackson@live.co.uk" },
+]
+description = "RSync Daemon service."
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.7"
+dependencies=['paramiko', 'watchdog', 'toml']
+keywords=['kde', 'plasma', 'config', 'setting', 'settings', 'save', 'saver']
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Development Status :: 1 - Planning",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: Unix",
+]
+
+[project.scripts]
+plasmasaver = "rsyncdaemon.rsyncdaemon:main"
+
+[project.urls]
+"Homepage" = "https://github.com/pankajackson/RSyncDaemon"
+"Bug Tracker" = "https://github.com/pankajackson/RSyncDaemon/issues"
+"Source" = "https://github.com/pankajackson/RSyncDaemon"
