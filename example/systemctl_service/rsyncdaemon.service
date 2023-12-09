@@ -1,0 +1,12 @@
+[Unit]
+Description=RSync daemon Service
+After=network.target
+
+[Service]
+User=root
+Group=root
+ExecStart=/usr/bin/rsyncdaemon -c /tmp/rsyncdaemon/rsyncdaemon.conf
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
