@@ -1,6 +1,3 @@
-import os
-import pwd
-import toml
 import subprocess
 import logging
 from logging.handlers import RotatingFileHandler
@@ -158,7 +155,7 @@ def main():
     parser = argparse.ArgumentParser(
         prog="rsyncdaemon",
         epilog="Please report bugs at pankajackson@live.co.uk",
-        description="Sync local directory to remote directory",
+        description="Sync local directory to remote directory in daemon mode.",
     )
     parser.add_argument(
         "-c",
@@ -176,7 +173,7 @@ def main():
     if args.version:
         print(f"rsyncdaemon: {get_version()}")
     else:
-        config_file_path = defaults["config_file_path"]
+        config_file_path = defaults["AppConfig"]["app_config_file_path"]
         if args.config:
             config_file_path = args.config
         config = get_config(config_file_path)
