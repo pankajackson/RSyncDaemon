@@ -12,150 +12,26 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import argparse
 import pkg_resources
+from rsyncdaemon.confbuilder import get_config, defaults
 
 
-rsyncdaemon_home = os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".rsyncdaemon")
-config_file_path = os.path.join(rsyncdaemon_home, "rsyncdaemon.conf")
-
-if not os.path.exists(rsyncdaemon_home):
-    os.makedirs(rsyncdaemon_home)
-
-version = pkg_resources.get_distribution("rsyncdaemon").version
-
-defaults = {
-    "local_dir": None,
-    "remote_dir": None,
-    "ssh_host": "localhost",
-    "ssh_port": 22,
-    "ssh_username": os.getenv("USER"),
-    "ssh_private_key_path": None,
-    "ssh_password": None,
-    "rsync_command": "rsync",
-    "rsync_options": ["-az", "--delete"],
-    "exclude_patterns": [],
-    "log_file_path": str(
-        os.path.join(
-            os.path.join(pwd.getpwuid(os.getuid()).pw_dir, ".rsyncdaemon"),
-            "rsyncdaemon.log",
-        )
-    ),
-    "log_max_size": 10 * 1024 * 1024,  # 10MB
-    "log_backup_count": 5,
-}
-
-
-def conf_initializer(config_file_path=config_file_path):
-    if not os.path.exists(config_file_path):
-        file = open(config_file_path, "w")
-        config = {
-            "SyncConfig": {
-                "local_dir": "",
-                "remote_dir": "",
-                "ssh_host": defaults["ssh_host"],
-                "ssh_port": defaults["ssh_port"],
-                "ssh_username": defaults["ssh_username"],
-                "ssh_password": defaults["ssh_username"],
-                "ssh_private_key_path": "",
-                "ssh_password": "",
-                "rsync_command": defaults["rsync_command"],
-                "rsync_options": defaults["rsync_options"],
-                "exclude_patterns": defaults["exclude_patterns"],
-            },
-            "LogConfig": {
-                "log_file_path": defaults["log_file_path"],
-                "log_max_size": defaults["log_max_size"],
-                "log_backup_count": defaults["log_backup_count"],
-            },
-        }
-        toml.dump(config, file)
-        file.close()
-        print(f"Please configure config file {config_file_path}")
-    return config_file_path
-
-
-conf_initializer()
-
-
-def toml_conf_reader():
-    # Read configuration from  ~/.rsyncdaemon/rsyncdaemon.conf
-    with open(config_file_path, "r") as f:
-        toml_config = toml.load(f)
-
-    config = {
-        "local_dir": toml_config["SyncConfig"].get("local_dir", defaults["local_dir"]),
-        "remote_dir": toml_config["SyncConfig"].get(
-            "remote_dir", defaults["remote_dir"]
-        ),
-        "ssh_host": toml_config["SyncConfig"].get("ssh_host", defaults["ssh_host"]),
-        "ssh_port": int(
-            toml_config["SyncConfig"].get("ssh_port", defaults["ssh_port"])
-        ),
-        "ssh_username": toml_config["SyncConfig"].get(
-            "ssh_username", defaults["ssh_username"]
-        ),
-        "ssh_private_key_path": toml_config["SyncConfig"].get(
-            "ssh_private_key_path", defaults["ssh_private_key_path"]
-        ),
-        "ssh_password": toml_config["SyncConfig"].get(
-            "ssh_password", defaults["ssh_password"]
-        ),
-        "rsync_command": toml_config["SyncConfig"].get(
-            "rsync_command", defaults["rsync_command"]
-        ),
-        "rsync_options": toml_config["SyncConfig"].get(
-            "rsync_options", defaults["rsync_options"]
-        ),
-        "exclude_patterns": toml_config["SyncConfig"].get(
-            "exclude_patterns", defaults["exclude_patterns"]
-        ),
-        "log_file_path": toml_config["LogConfig"].get(
-            "log_file_path", defaults["log_file_path"]
-        ),
-        "log_max_size": int(
-            toml_config["LogConfig"].get("log_max_size", defaults["log_max_size"])
-        ),  # 10 MB
-        "log_backup_count": int(
-            toml_config["LogConfig"].get(
-                "log_backup_count", defaults["log_backup_count"]
-            )
-        ),
-    }
-    return config
-
-
-def get_config():
-    return toml_conf_reader()
-
-
-try:
-    config = get_config()
-    local_dir = config["local_dir"]
-    remote_dir = config["remote_dir"]
-    ssh_host = config["ssh_host"]
-    ssh_port = int(config["ssh_port"])
-    ssh_user = config["ssh_username"]
-    ssh_private_key_path = config["ssh_private_key_path"]
-    ssh_password = config["ssh_password"]
-    rsync_command = config["rsync_command"]
-    rsync_options = config["rsync_options"]
-    exclude_patterns = config["exclude_patterns"]
-    log_file_path = config["log_file_path"]
-    log_max_size = int(config["log_max_size"])  # 10 MB
-    log_backup_count = int(config["log_backup_count"])
-except KeyError:
-    raise Exception(f"Please configure config file {config_file_path}")
+def get_version():
+    return pkg_resources.get_distribution("rsyncdaemon").version
 
 
 # Configure logging
-logger = logging.getLogger("")
-logger.setLevel(logging.INFO)
-file_handler = RotatingFileHandler(
-    log_file_path, maxBytes=log_max_size, backupCount=log_backup_count
-)
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s]: %(message)s"))
-# Add rotating file handler to the root logger
-logger.addHandler(file_handler)
+def init_logger(log_file_path, log_max_size, log_backup_count):
+    logger = logging.getLogger("")
+    logger.setLevel(logging.INFO)
+    file_handler = RotatingFileHandler(
+        log_file_path, maxBytes=log_max_size, backupCount=log_backup_count
+    )
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s [%(levelname)s]: %(message)s")
+    )
+    # Add rotating file handler to the root logger
+    logger.addHandler(file_handler)
 
 
 # Initialize SSH client
@@ -163,7 +39,7 @@ ssh = paramiko.SSHClient()
 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
 
-def is_excluded(path):
+def is_excluded(path, local_dir, exclude_patterns):
     """Check if the path matches any exclude pattern."""
     path = pathlib.PurePosixPath(path).relative_to(local_dir)
     for pattern in exclude_patterns:
@@ -172,40 +48,40 @@ def is_excluded(path):
     return False
 
 
-def sync_directories(event):
-    exclude_options = [f"--exclude={pattern}" for pattern in exclude_patterns]
-    if ssh_private_key_path:
+def sync_directories(event, config):
+    exclude_options = [f"--exclude={pattern}" for pattern in config["exclude_patterns"]]
+    if config["ssh_private_key_path"]:
         command = [
-            rsync_command,
-            *rsync_options,
-            *exclude_options,
+            config["rsync_command"],
+            *config["rsync_options"],
+            *config["exclude_options"],
             "-e",
-            f"ssh -i {ssh_private_key_path} -p {ssh_port}",
-            f"{local_dir}/",
-            f"{ssh_user}@{ssh_host}:{remote_dir}/",
+            f"ssh -i {config['ssh_private_key_path']} -p {config['ssh_port']}",
+            f"{config['local_dir']}/",
+            f"{config['ssh_username']}@{config['ssh_host']}:{config['remote_dir']}/",
         ]
-    elif ssh_password:
+    elif config["ssh_password"]:
         command = [
             "sshpass",
             "-p",
-            f"{ssh_password}",
-            rsync_command,
-            *rsync_options,
+            f"{config['ssh_password']}",
+            config["rsync_command"],
+            *config["rsync_options"],
             *exclude_options,
             "-e",
-            f"ssh -p {ssh_port}",
-            f"{local_dir}/",
-            f"{ssh_user}@{ssh_host}:{remote_dir}/",
+            f"ssh -p {config['ssh_port']}",
+            f"{config['local_dir']}/",
+            f"{config['ssh_username']}@{config['ssh_host']}:{config['remote_dir']}/",
         ]
     else:
         command = [
-            rsync_command,
-            *rsync_options,
+            config["rsync_command"],
+            *config["rsync_options"],
             *exclude_options,
             "-e",
-            f"ssh -p {ssh_port}",
-            f"{local_dir}/",
-            f"{ssh_user}@{ssh_host}:{remote_dir}/",
+            f"ssh -p {config['ssh_port']}",
+            f"{config['local_dir']}/",
+            f"{config['ssh_username']}@{config['ssh_host']}:{config['remote_dir']}/",
         ]
     try:
         process = subprocess.Popen(
@@ -232,23 +108,35 @@ def sync_directories(event):
 
 
 class FSHandler(FileSystemEventHandler):
+    def __init__(self, config) -> None:
+        self.config = config
+        super().__init__()
+
     def on_modified(self, event):
         if event.is_directory:
             return
-        if not is_excluded(event.src_path):
-            sync_directories(event)
+        if not is_excluded(
+            path=event.src_path,
+            local_dir=self.config["local_dir"],
+            exclude_patterns=self.config["exclude_patterns"],
+        ):
+            sync_directories(event, self.config)
 
     def on_created(self, event):
         if event.is_directory:
             return
-        if not is_excluded(event.src_path):
-            sync_directories(event)
+        if not is_excluded(
+            path=event.src_path,
+            local_dir=self.config["local_dir"],
+            exclude_patterns=self.config["exclude_patterns"],
+        ):
+            sync_directories(event, self.config)
 
 
-def start_sync():
-    event_handler = FSHandler()
+def start_sync(config):
+    event_handler = FSHandler(config=config)
     observer = Observer()
-    observer.schedule(event_handler, path=local_dir, recursive=True)
+    observer.schedule(event_handler, path=config["local_dir"], recursive=True)
     observer.start()
 
     try:
@@ -267,7 +155,6 @@ def stop_sync():
 
 
 def main():
-    global config_file_path
     parser = argparse.ArgumentParser(
         prog="rsyncdaemon",
         epilog="Please report bugs at pankajackson@live.co.uk",
@@ -277,8 +164,9 @@ def main():
         "-c",
         "--config",
         required=False,
-        action="store_true",
-        help=f"Config file path. default: {config_file_path}",
+        type=str,
+        help=f"Config file path. default: ~/.rsyncdaemon/rsyncdaemon.conf",
+        metavar="<path>",
     )
     parser.add_argument(
         "-v", "--version", required=False, action="store_true", help="Show version"
@@ -286,25 +174,40 @@ def main():
 
     args = parser.parse_args()
     if args.version:
-        print(f"rsyncdaemon: {version}")
+        print(f"rsyncdaemon: {get_version()}")
     else:
+        config_file_path = defaults["config_file_path"]
         if args.config:
             config_file_path = args.config
+        config = get_config(config_file_path)
         try:
-            if ssh_private_key_path:
+            init_logger(
+                log_file_path=config["log_file_path"],
+                log_max_size=config["log_max_size"],
+                log_backup_count=["log_backup_count"],
+            )
+
+            if config["ssh_private_key_path"]:
                 ssh.connect(
-                    ssh_host,
-                    port=ssh_port,
-                    username=ssh_user,
-                    key_filename=ssh_private_key_path,
+                    config["ssh_host"],
+                    port=config["ssh_port"],
+                    username=config["ssh_username"],
+                    key_filename=config["ssh_private_key_path"],
                 )
-            elif ssh_password:
+            elif config["ssh_password"]:
                 ssh.connect(
-                    ssh_host, port=ssh_port, username=ssh_user, password=ssh_password
+                    config["ssh_host"],
+                    port=config["ssh_port"],
+                    username=config["ssh_username"],
+                    password=config["ssh_password"],
                 )
             else:
-                ssh.connect(ssh_host, port=ssh_port, username=ssh_user)
-            start_sync()
+                ssh.connect(
+                    config["ssh_host"],
+                    port=config["ssh_port"],
+                    username=config["ssh_username"],
+                )
+            start_sync(config)
         except Exception as e:
             logging.error(f"Error connecting to the remote host: {e}")
             raise Exception(f"Error connecting to the remote host: {e}")
